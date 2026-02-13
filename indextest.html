@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard รายงานผลการเลือกตั้ง (ผู้บริหาร)</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background-color: #f4f7f6; color: #333; }
+        
+        /* Loading Overlay */
+        #loading-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); z-index:9999; display:flex; flex-direction: column; align-items:center; justify-content:center; }
+        .loader-spinner { width: 3rem; height: 3rem; }
+
+        /* Header & Tabs */
+        .header-title { font-weight: 700; color: #1a237e; letter-spacing: -0.5px; }
+        .nav-pills .nav-link { border-radius: 50px; font-weight: 600; padding: 10px 25px; margin: 0 5px; color: #555; background: #e9ecef; transition: all 0.3s ease;}
+        .nav-pills .nav-link.active { background: #1a237e; color: #fff; box-shadow: 0 4px 10px rgba(26,35,126,0.3); }
+
+        /* Stat Cards */
+        .card-stat { border: none; border-radius: 16px; color: white; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 6px 15px rgba(0,0,0,0.08); transition: transform 0.2s;}
+        .card-stat:hover { transform: translateY(-3px); }
+        .card-stat h6 { font-weight: 600; opacity: 0.9; margin-bottom: 5px; font-size: 1rem;}
+        .card-stat h3 { font-weight: 700; font-size: 2rem; margin-bottom: 0; }
+        .card-stat small { font-size: 0.85rem; font-weight: 400; opacity: 0.85; background: rgba(0,0,0,0.15); padding: 3px 8px; border-radius: 20px; display: inline-block; margin-top: 8px;}
+        .icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 5rem; opacity: 0.15; }
+        
+        /* Gradients */
+        .bg-turnout { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .bg-good { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: #0d47a1; }
+        .bg-bad { background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%); }
+        .bg-no { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #5d4037; }
+
+        /* Ranking Section */
+        .ranking-card { border: none; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .ranking-item { padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+        .ranking-item:last-child { border-bottom: none; }
+        .progress { height: 10px; border-radius: 10px; background-color: #e9ecef; margin-top: 6px;}
+        .progress-bar { border-radius: 10px; background: linear-gradient(90deg, #1a237e, #3f51b5); }
+
+        /* DataTable Styles */
+        .table-card { border: none; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
+        .table-responsive { max-height: 600px; }
+        table.dataTable { border-collapse: collapse !important; margin-top: 0 !important; width: 100% !important; }
+        table.dataTable thead th { background-color: #1a237e; color: white; text-align: center; vertical-align: middle; white-space: nowrap; font-size: 0.9rem; padding: 12px; border: 1px solid #303f9f; }
+        table.dataTable tbody td { text-align: right; vertical-align: middle; font-size: 0.9rem; border: 1px solid #e0e0e0; }
+        
+        /* ล็อกคอลัมน์ซ้ายสุดให้อยู่กับที่ */
+        table.dataTable tbody td:first-child, table.dataTable thead th:first-child { 
+            position: sticky; left: 0; z-index: 2; background-color: #f8f9fa; color: #1a237e; font-weight: bold; text-align: left; box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+        table.dataTable thead th:first-child { background-color: #11185a; color: white; z-index: 3;}
+        .winner-cell { background-color: #e8f5e9 !important; color: #2e7d32 !important; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="loading-overlay">
+    <div class="spinner-border text-primary loader-spinner" role="status"></div>
+    <h4 class="mt-3 fw-bold text-primary">กำลังเตรียมข้อมูล...</h4>
+    <p class="text-muted">กำลังดึงข้อมูลจาก Google Sheets API</p>
+</div>
+
+<div class="container-fluid py-4 px-lg-5">
+    
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="header-title mb-1"><i class="fa-solid fa-chart-pie me-2"></i>Executive Dashboard</h2>
+            <p class="text-muted mb-0">รายงานผลการเลือกตั้งอย่างไม่เป็นทางการ</p>
+        </div>
+        <div class="mt-3 mt-md-0">
+            <ul class="nav nav-pills" id="electionTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="ss-tab" data-bs-toggle="tab" data-bs-target="#ss-content" type="button" role="tab" onclick="renderView('SS')">
+                        <i class="fa-solid fa-user me-1"></i> 5/18 สส. (แบบเขต)
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pz-tab" data-bs-toggle="tab" data-bs-target="#pz-content" type="button" role="tab" onclick="renderView('PZ')">
+                        <i class="fa-solid fa-users me-1"></i> 5/18 บช. (บัญชีรายชื่อ)
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-stat bg-turnout">
+                <i class="fa-solid fa-users icon-bg"></i>
+                <h6>ผู้มาแสดงตน (ใช้สิทธิ)</h6>
+                <h3 id="stat-turnout">0</h3>
+                <small id="stat-turnout-pct">ผู้มีสิทธิทั้งหมด 0 คน (0%)</small>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-stat bg-good">
+                <i class="fa-solid fa-check-circle icon-bg"></i>
+                <h6>บัตรดี</h6>
+                <h3 id="stat-good">0</h3>
+                <small id="stat-good-pct">คิดเป็น 0% ของผู้มาใช้สิทธิ</small>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-stat bg-bad">
+                <i class="fa-solid fa-times-circle icon-bg"></i>
+                <h6>บัตรเสีย</h6>
+                <h3 id="stat-bad">0</h3>
+                <small id="stat-bad-pct">คิดเป็น 0% ของผู้มาใช้สิทธิ</small>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-stat bg-no">
+                <i class="fa-solid fa-ban icon-bg"></i>
+                <h6>ไม่เลือกผู้ใด (Vote NO)</h6>
+                <h3 id="stat-no">0</h3>
+                <small id="stat-no-pct">คิดเป็น 0% ของผู้มาใช้สิทธิ</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-xl-3 col-lg-4">
+            <div class="card ranking-card h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                    <h5 class="fw-bold text-primary"><i class="fa-solid fa-trophy me-2 text-warning"></i>อันดับคะแนนสูงสุด</h5>
+                </div>
+                <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                    <div id="ranking-list">
+                        </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-9 col-lg-8">
+            <div class="card table-card h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-end">
+                    <h5 class="fw-bold text-primary"><i class="fa-solid fa-table border-list me-2"></i>ข้อมูลรายหน่วยเลือกตั้ง</h5>
+                    <span class="badge bg-success bg-opacity-10 text-success p-2"><i class="fa-solid fa-circle-info me-1"></i>สีเขียวคือคะแนนสูงสุดในหน่วย</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive" id="table-container-ss">
+                        <table id="dataTableSS" class="table table-hover w-100">
+                            <thead id="thead-ss"></thead>
+                            <tbody id="tbody-ss"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="table-responsive d-none" id="table-container-pz">
+                        <table id="dataTablePZ" class="table table-hover w-100">
+                            <thead id="thead-pz"></thead>
+                            <tbody id="tbody-pz"></tbody>
+                        </table>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    // URL ของ API ที่ดึงข้อมูลจาก Sheet (พี่วาง URL ให้ถูกต้อง)
+    const URL_SS = "https://script.google.com/macros/s/AKfycbwDKfbUED7Wqpo8L4CvjAuejif7ud5q5RJ_MTcU3uHuEsqb8ByIiLIbrSr_Hh3trTYw8w/exec";
+    const URL_PZ = "https://script.google.com/macros/s/AKfycbz3EVB1uZaTBdKL6afUMa26ZV2q93EMz9JL3WEJQrRksLl8AFXS2FzOI93v9EGgxdh5FQ/exec";
+
+    // ตัวแปรเก็บข้อมูล
+    let globalData = {
+        'SS': null,
+        'PZ': null
+    };
+
+    $(document).ready(function() {
+        // ดึงข้อมูล 2 API พร้อมกัน
+        Promise.all([
+            fetch(URL_SS).then(res => res.json()),
+            fetch(URL_PZ).then(res => res.json())
+        ])
+        .then(([rawSS, rawPZ]) => {
+            // ประมวลผลข้อมูล สส. และ บช.
+            globalData['SS'] = processRawData(rawSS, "เบอร์ ");
+            globalData['PZ'] = processRawData(rawPZ, "พรรค ");
+            
+            // ปิดฉากโหลด โชว์ข้อมูลเริ่มต้นที่หน้า สส.
+            $('#loading-overlay').fadeOut();
+            renderView('SS');
+        })
+        .catch(err => {
+            $('#loading-overlay').html(`<div class="text-danger text-center"><h4><i class="fa-solid fa-triangle-exclamation"></i> เกิดข้อผิดพลาด</h4><p>ไม่สามารถดึงข้อมูลจาก Google Sheets ได้<br>โปรดตรวจสอบ URL และสิทธิ์การเข้าถึง (Anyone)</p></div>`);
+            console.error("Fetch error:", err);
+        });
+    });
+
+    /**
+     * ฟังก์ชันแปลงข้อมูลดิบจาก Array of Arrays เป็น Object ที่ใช้งานง่าย
+     * แถว 0: หน่วย, 1: มีสิทธิ, 2: มาแสดงตน, 3: จัดสรร, 4: ใช้, 5: ดี, 6: เสีย, 7: ไม่เลือก, 8: เหลือ
+     * แถว 9 เป็นต้นไป คอลัมน์ A(index 0) = ชื่อเบอร์/พรรค, คอลัมน์ที่เหลือ = คะแนนแต่ละหน่วย
+     */
+    function processRawData(raw, prefixLabel) {
+        const numCols = raw[0].length;
+        let totals = { eligible:0, turnout:0, allotted:0, used:0, good:0, bad:0, noVote:0, remain:0 };
+        let stations = [];
+        let candidates = [];
+
+        // 1. อ่านรายชื่อผู้สมัคร (แถวที่ 9 เป็นต้นไป)
+        for(let i=9; i<raw.length; i++) {
+            let cName = raw[i][0];
+            if(!cName) continue; // ข้ามบรรทัดว่าง
+            // ป้องกันกรณีชื่อเบอร์เป็นตัวเลขเฉยๆ จะได้แสดงเป็น "เบอร์ 1" หรือ "พรรค 1" ให้สวยๆ
+            let displayName = isNaN(cName) ? cName : prefixLabel + cName;
+            candidates.push({ originalRowIndex: i, name: displayName, totalScore: 0 });
+        }
+
+        // 2. อ่านข้อมูลรายหน่วย (เริ่มที่คอลัมน์ 1 หรือ B2 ตามที่สั่ง)
+        for(let c=1; c<numCols; c++) {
+            let stName = raw[0][c];
+            if(!stName) continue;
+
+            let st = {
+                name: stName,
+                eligible: parseInt(raw[1][c]) || 0,
+                turnout: parseInt(raw[2][c]) || 0,
+                allotted: parseInt(raw[3][c]) || 0,
+                used: parseInt(raw[4][c]) || 0,
+                good: parseInt(raw[5][c]) || 0,
+                bad: parseInt(raw[6][c]) || 0,
+                noVote: parseInt(raw[7][c]) || 0,
+                remain: parseInt(raw[8][c]) || 0,
+                scores: []
+            };
+
+            // รวมสถิติเขต
+            totals.eligible += st.eligible;
+            totals.turnout += st.turnout;
+            totals.allotted += st.allotted;
+            totals.used += st.used;
+            totals.good += st.good;
+            totals.bad += st.bad;
+            totals.noVote += st.noVote;
+            totals.remain += st.remain;
+
+            // คะแนนรายคนในหน่วยนี้
+            candidates.forEach((cand, idx) => {
+                let s = parseInt(raw[cand.originalRowIndex][c]) || 0;
+                st.scores.push(s);
+                candidates[idx].totalScore += s; // บวกคะแนนรวมให้ผู้สมัคร
+            });
+
+            stations.push(st);
+        }
+
+        // 3. เรียงลำดับผู้ชนะ
+        let ranked = [...candidates].sort((a,b) => b.totalScore - a.totalScore);
+
+        return { totals, stations, candidates, ranked };
+    }
+
+    /**
+     * ฟังก์ชันควบคุมการแสดงผลสลับหน้า สส. และ บช.
+     */
+    let dtTableSS = null;
+    let dtTablePZ = null;
+
+    function renderView(type) {
+        const data = globalData[type];
+        if(!data) return;
+
+        // สลับซ่อน/โชว์ ตาราง
+        if(type === 'SS') {
+            $('#table-container-ss').removeClass('d-none');
+            $('#table-container-pz').addClass('d-none');
+        } else {
+            $('#table-container-pz').removeClass('d-none');
+            $('#table-container-ss').addClass('d-none');
+        }
+
+        // --- 1. อัปเดต Stat Cards ---
+        const t = data.totals;
+        const calcPct = (val, total) => total > 0 ? ((val/total)*100).toFixed(2) : 0;
+
+        $('#stat-turnout').text(t.turnout.toLocaleString());
+        $('#stat-turnout-pct').text(`ผู้มีสิทธิทั้งหมด ${t.eligible.toLocaleString()} คน (${calcPct(t.turnout, t.eligible)}%)`);
+        
+        $('#stat-good').text(t.good.toLocaleString());
+        $('#stat-good-pct').text(`คิดเป็น ${calcPct(t.good, t.turnout)}% ของผู้ใช้สิทธิ`);
+
+        $('#stat-bad').text(t.bad.toLocaleString());
+        $('#stat-bad-pct').text(`คิดเป็น ${calcPct(t.bad, t.turnout)}% ของผู้ใช้สิทธิ`);
+
+        $('#stat-no').text(t.noVote.toLocaleString());
+        $('#stat-no-pct').text(`คิดเป็น ${calcPct(t.noVote, t.turnout)}% ของผู้ใช้สิทธิ`);
+
+
+        // --- 2. อัปเดต Ranking List ---
+        const rankingHtml = data.ranked.map((c, index) => {
+            let maxScore = data.ranked[0].totalScore || 1; // กันหาร 0
+            let pct = (c.totalScore / maxScore) * 100;
+            
+            // ไอคอนถ้วยทองสำหรับที่ 1
+            let medal = index === 0 ? '<i class="fa-solid fa-medal text-warning ms-2"></i>' : '';
+            // เน้นสีให้ Top 3
+            let rankNumClass = index < 3 ? 'bg-primary text-white' : 'bg-light text-secondary border';
+
+            return `
+            <div class="ranking-item">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="fw-bold text-truncate" style="max-width:70%;">
+                        <span class="badge ${rankNumClass} rounded-circle me-2" style="width:24px;height:24px;padding:5px 0;">${index+1}</span>
+                        ${c.name} ${medal}
+                    </div>
+                    <div class="fw-bold text-primary">${c.totalScore.toLocaleString()}</div>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped ${index === 0 ? 'progress-bar-animated' : ''}" style="width: ${pct}%"></div>
+                </div>
+            </div>`;
+        }).join('');
+        $('#ranking-list').html(rankingHtml);
+
+
+        // --- 3. อัปเดต DataTable ---
+        const tableId = type === 'SS' ? '#dataTableSS' : '#dataTablePZ';
+        const theadId = type === 'SS' ? '#thead-ss' : '#thead-pz';
+        const tbodyId = type === 'SS' ? '#tbody-ss' : '#tbody-pz';
+        
+        let dtInstance = type === 'SS' ? dtTableSS : dtTablePZ;
+
+        // ถ้ายังไม่เคยสร้าง Table นี้ ให้สร้างใหม่
+        if (!dtInstance) {
+            // สร้าง Header
+            let headHtml = `<tr>
+                <th>หน่วยเลือกตั้ง</th><th>ผู้มีสิทธิ</th><th>ใช้สิทธิ</th>
+                <th>จัดสรร</th><th>ใช้ไป</th><th>ดี</th><th>เสีย</th><th>No</th><th>เหลือ</th>`;
+            data.candidates.forEach(c => { headHtml += `<th>${c.name}</th>`; });
+            headHtml += `</tr>`;
+            $(theadId).html(headHtml);
+
+            // สร้าง Body
+            let bodyHtml = '';
+            data.stations.forEach(st => {
+                const maxScore = Math.max(...st.scores);
+                bodyHtml += `<tr>
+                    <td>${st.name}</td>
+                    <td>${st.eligible.toLocaleString()}</td>
+                    <td class="text-primary fw-bold">${st.turnout.toLocaleString()}</td>
+                    <td>${st.allotted.toLocaleString()}</td>
+                    <td>${st.used.toLocaleString()}</td>
+                    <td class="text-success">${st.good.toLocaleString()}</td>
+                    <td class="text-danger">${st.bad.toLocaleString()}</td>
+                    <td class="text-secondary">${st.noVote.toLocaleString()}</td>
+                    <td>${st.remain.toLocaleString()}</td>`;
+                
+                st.scores.forEach(s => {
+                    let isWinner = (s === maxScore && s > 0) ? 'winner-cell' : '';
+                    bodyHtml += `<td class="${isWinner}">${s.toLocaleString()}</td>`;
+                });
+                bodyHtml += `</tr>`;
+            });
+            $(tbodyId).html(bodyHtml);
+
+            // Initialize DataTable
+            dtInstance = $(tableId).DataTable({
+                "scrollX": true,
+                "pageLength": 10,
+                "language": {
+                    "search": "🔍 ค้นหาหน่วย:",
+                    "lengthMenu": "แสดง _MENU_ รายการ",
+                    "info": "กำลังแสดง _START_ ถึง _END_ จาก _TOTAL_ หน่วย",
+                    "paginate": { "next": "ถัดไป", "previous": "ก่อนหน้า" }
+                }
+            });
+
+            // เก็บ instance ไว้
+            if(type === 'SS') dtTableSS = dtInstance;
+            else dtTablePZ = dtInstance;
+
+        } else {
+            // ถ้าตารางเคยสร้างแล้ว แค่ Adjust คอลัมน์ให้เข้ารูปเวลาเปลี่ยน Tab
+            setTimeout(() => { dtInstance.columns.adjust().draw(); }, 10);
+        }
+    }
+</script>
+</body>
+</html>
